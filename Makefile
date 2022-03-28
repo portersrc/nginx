@@ -10,7 +10,19 @@ clean:
 .PHONY:	default clean
 
 build:
-	$(MAKE) -f objs/Makefile
+	$(MAKE) -f objs/Makefile.wpd-windows
+
+base_loop_simplify:
+	$(MAKE) -f objs/Makefile.wpd-windows base_loop_simplify
+
+base_loop_simplify_ics:
+	$(MAKE) -f objs/Makefile.wpd-windows base_loop_simplify_ics
+
+wpd_ics:
+	$(MAKE) -f objs/Makefile.wpd-windows wpd_ics
+
+wpd_custlink_ics:
+	$(MAKE) -f objs/Makefile.wpd-windows wpd_custlink_ics
 
 install:
 	$(MAKE) -f objs/Makefile install
@@ -27,4 +39,4 @@ upgrade:
 
 	kill -QUIT `cat /logs/nginx.pid.oldbin`
 
-.PHONY:	build install modules upgrade
+.PHONY:	build install modules upgrade base_loop_simplify wpd_ics wpd_custlink_ics

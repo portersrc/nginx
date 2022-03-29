@@ -4,11 +4,15 @@ LLVM_BASE=C:/Users/rudy/h/wo/llvm/llvm-project/build/Release/bin
 CC=$(LLVM_BASE)/clang.exe
 #CFLAGS =  -O2  -W4 -WX -nologo -MT -Zi -Fdobjs/nginx.pdb -DFD_SETSIZE=1024
 #CFLAGS = -c -emit-llvm -S -fPIC -ffunction-sections -pipe  -O -Wall -Wextra -Wpointer-arith -Wconditional-uninitialized -Wno-unused-parameter -Werror -g 
-CFLAGS =  -O2  -Fdobjs/nginx.pdb -DFD_SETSIZE=1024
+#CFLAGS =  -O2  -Fdobjs/nginx.pdb -DFD_SETSIZE=1024
+CFLAGS = -c -emit-llvm -S -ffunction-sections -pipe  -O -Wall -Wextra -Wpointer-arith -Wconditional-uninitialized -Wno-unused-parameter -g  -Fdobjs/nginx.pdb -DFD_SETSIZE=1024
 #CPP =	
 CPP=$(LLVM_BASE)/clang++.exe
-LINK =	$(CC)
+#LINK =	$(CC)
 #LINK =	cl
+LINK=$(LLVM_BASE)/llvm-link.exe
+OPT=$(LLVM_BASE)/opt.exe
+LLC=$(LLVM_BASE)/llc.exe
 
 FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES="C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\um\x86"
 
@@ -223,7 +227,7 @@ objs/nginx.exe:	objs/src/core/nginx.obj \
 	objs/ngx_modules.obj \
 	objs/nginx.res
 	$(LINK) \
-	-o objs/nginx.exe \
+	-o objs/nginxlink.bc \
 	objs/src/core/nginx.obj  \
 	objs/src/core/ngx_log.obj  \
 	objs/src/core/ngx_palloc.obj  \
@@ -338,12 +342,26 @@ objs/nginx.exe:	objs/src/core/nginx.obj \
 	objs/src/http/modules/ngx_http_upstream_keepalive_module.obj \
 	objs/src/http/modules/ngx_http_upstream_zone_module.obj \
 	objs/ngx_modules.obj \
-	$(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/kernel32.lib \
-	$(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/user32.lib \
-    $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/advapi32.lib \
-	$(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib \
-    objs/nginx.res objs/ngx_pch.obj
-	
+	objs/ngx_pch.obj
+ 
+base_loop_simplify:
+	$(OPT) \
+      --function-sections \
+      -O3 \
+      -loop-simplify \
+      < objs/nginxlink.bc \
+      > objs/nginx_baseline_ls_opt.bc
+	$(LLC) \
+      objs/nginx_baseline_ls_opt.bc \
+      -o objs/nginx_baseline_ls_opt.s
+	$(CC) \
+      objs/nginx_baseline_ls_opt.s \
+      -o objs/nginx_baseline_ls \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/kernel32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/user32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/advapi32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib \
+      objs/nginx.res
 
 modules:
 

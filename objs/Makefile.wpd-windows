@@ -5,7 +5,7 @@ CC=$(LLVM_BASE)/clang.exe
 #CFLAGS =  -O2  -W4 -WX -nologo -MT -Zi -Fdobjs/nginx.pdb -DFD_SETSIZE=1024
 #CFLAGS = -c -emit-llvm -S -fPIC -ffunction-sections -pipe  -O -Wall -Wextra -Wpointer-arith -Wconditional-uninitialized -Wno-unused-parameter -Werror -g 
 #CFLAGS =  -O2  -Fdobjs/nginx.pdb -DFD_SETSIZE=1024
-CFLAGS = -c -emit-llvm -S -ffunction-sections -pipe  -O -Wall -Wextra -Wpointer-arith -Wconditional-uninitialized -Wno-unused-parameter -g  -Fdobjs/nginx.pdb -DFD_SETSIZE=1024
+CFLAGS = -c -emit-llvm -S -ffunction-sections -pipe  -O -Wall -Wextra -Wpointer-arith -Wconditional-uninitialized -Wno-unused-parameter -g  -Fdobjs/nginx.pdb -DFD_SETSIZE=1024 -target i686-pc-windows-gnu
 #CPP =	
 CPP=$(LLVM_BASE)/clang++.exe
 #LINK =	$(CC)
@@ -13,8 +13,24 @@ CPP=$(LLVM_BASE)/clang++.exe
 LINK=$(LLVM_BASE)/llvm-link.exe
 OPT=$(LLVM_BASE)/opt.exe
 LLC=$(LLVM_BASE)/llc.exe
+LLVM-DIS=$(LLVM_BASE)/llvm-dis.exe
 
 FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES="C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\um\x86"
+
+WPD_PATH=C:/Users/rudy/h/wo/decker/whole-program-debloat/build/lib/Release
+DEBLOATRT_LIB_PATH=C:/Users/rudy/h/wo/decker/whole-program-debloat/build/debloat_rt/Release
+
+
+MING_BASE=C:/msys64/mingw32/bin
+GCC=${MING_BASE}/gcc.exe
+GPP=${MING_BASE}/g++.exe
+NM=${MING_BASE}/nm.exe
+
+USRBIN_BASE=C:/msys64/usr/bin
+AWK=${USRBIN_BASE}/awk.exe
+SORT=${USRBIN_BASE}/sort.exe
+GREP=${USRBIN_BASE}/grep.exe
+TAIL=${USRBIN_BASE}/tail.exe
 
 
 ALL_INCS = -I src/core \
@@ -226,8 +242,10 @@ objs/nginx.exe:	objs/src/core/nginx.obj \
 	objs/src/http/modules/ngx_http_upstream_zone_module.obj \
 	objs/ngx_modules.obj \
 	objs/nginx.res
+	# cporter: for ics builds, use -o objs/nginxlink_ics.bc and add objs/ics.ll at the end
+	#          for non-ics builds, use -o objs/nginxlink.bc and remove objs/ics.ll at the end
 	$(LINK) \
-	-o objs/nginxlink.bc \
+	-o objs/nginxlink_ics.bc \
 	objs/src/core/nginx.obj  \
 	objs/src/core/ngx_log.obj  \
 	objs/src/core/ngx_palloc.obj  \
@@ -342,9 +360,10 @@ objs/nginx.exe:	objs/src/core/nginx.obj \
 	objs/src/http/modules/ngx_http_upstream_keepalive_module.obj \
 	objs/src/http/modules/ngx_http_upstream_zone_module.obj \
 	objs/ngx_modules.obj \
-	objs/ngx_pch.obj
+	objs/ngx_pch.obj \
+	objs/ics.ll
  
-base_loop_simplify:
+base_loop_simplify_old_with_cl_link:
 	$(OPT) \
       --function-sections \
       -O3 \
@@ -356,12 +375,125 @@ base_loop_simplify:
       -o objs/nginx_baseline_ls_opt.s
 	$(CC) \
       objs/nginx_baseline_ls_opt.s \
-      -o objs/nginx_baseline_ls \
+      -o objs/nginx_baseline_ls.exe \
       $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/kernel32.lib \
       $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/user32.lib \
       $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/advapi32.lib \
       $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib \
       objs/nginx.res
+base_loop_simplify:
+	$(OPT) \
+      --function-sections \
+      -O3 \
+      -loop-simplify \
+      < objs/nginxlink.bc \
+      > objs/nginx_baseline_ls_opt.bc
+	$(LLC) \
+      objs/nginx_baseline_ls_opt.bc \
+      -filetype=obj \
+      -o objs/nginx_baseline_ls_opt.o
+	$(GCC) \
+      objs/nginx_baseline_ls_opt.o \
+      -o objs/nginx_baseline_ls.exe \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/kernel32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/user32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/advapi32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib
+
+base_loop_simplify_ics:
+	$(OPT) \
+      --function-sections \
+      -O3 \
+      -loop-simplify \
+      < objs/nginxlink_ics.bc \
+      > objs/nginx_baseline_ls_ics_opt.bc
+#
+# XXX Need to enable indirect call sinking in the compiler pass and the runtime.
+# On Windows we're not relying on env variables or cl::opt
+#
+wpd_ics:
+	#$(OPT) \
+    #  --function-sections \
+    #  -load ${WPD_PATH}/WholeProgramDebloat.dll \
+    #  -WholeProgramDebloat \
+    #  < objs/nginx_baseline_ls_ics_opt.bc \
+    #  > objs/nginx_wpd_ics_opt.bc
+	## disassemble so we can do a hacky fix to the ics symbols                   
+	#$(LLVM-DIS) objs/nginx_wpd_ics_opt.bc
+	#sed -i \
+    #  's/declare extern_weak i32 @ics_map_indirect_call.2(i64)//w sed_changes_0.txt' \
+    #  objs/nginx_wpd_ics_opt.ll
+	#sed -i \
+    #  's/declare extern_weak i32 @ics_wrapper_debrt_protect_loop_end.3(i32)//w sed_changes_1.txt' \
+    #  objs/nginx_wpd_ics_opt.ll
+	#sed -i \
+    #  's/ics_map_indirect_call.2/ics_map_indirect_call/w sed_changes_2.txt' \
+    #  objs/nginx_wpd_ics_opt.ll
+	#sed -i \
+    #  's/ics_wrapper_debrt_protect_loop_end.3/ics_wrapper_debrt_protect_loop_end/w sed_changes_3.txt' \
+    #  objs/nginx_wpd_ics_opt.ll
+	#sed -i \
+    #  's/debrt_protect_indirect.1/debrt_protect_indirect/w sed_changes_5.txt' \
+    #  objs/nginx_wpd_ics_opt.ll
+	#sed -i \
+    #  's/declare i32 @debrt_protect_indirect(i64)$$//w sed_changes_4.txt' \
+    #  objs/nginx_wpd_ics_opt.ll
+	## now ingest the modified .ll file and run always-inline on it.
+	#$(OPT) \
+    #  --function-sections \
+    #  -always-inline \
+    #  < objs/nginx_wpd_ics_opt.ll \
+    #  > objs/nginx_wpd_ics_opt.bc
+	#$(LLC) \
+    #  --function-sections \
+    #  objs/nginx_wpd_ics_opt.bc \
+    #  -o objs/nginx_wpd_ics_opt.s
+	#${LLC} \
+    #  --function-sections \
+    #  objs/nginx_wpd_ics_opt.bc \
+    #  -filetype=obj \
+    #  -o objs/nginx_wpd_ics_opt.o
+	#$(NM) objs/nginx_wpd_ics_opt.o \
+    #  | ${AWK} '{if($$2=="T" || $$2=="t") print $$0}' \
+    #  | ${SORT} \
+    #  > text_symbol_addrs.out
+	#$(NM) --print-size --size-sort objs/nginx_wpd_ics_opt.o \
+    #  | ${GREP} "t \.text" \
+    #  | ${AWK} '{print $$2'} \
+    #  | ${TAIL} -n 1 \
+    #  > object_text_size.out
+	$(CC) \
+      -g \
+      -ffunction-sections \
+      objs/nginx_wpd_ics_opt.s \
+      -o objs/nginx_wpd_ics.exe \
+      ${DEBLOATRT_LIB_PATH}/debloat_rt.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/kernel32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/user32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/advapi32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib \
+      objs/nginx.res
+	#g++ \
+    #  -ffunction-sections \
+    #  -Wl,--verbose \
+    #  objs/nginx_wpd_ics_opt.s \
+    #  -o objs/nginx_wpd_ics \
+    #  -ldebloat_rt -lm -lrt -ldl -lpthread -lcrypt -lpcre -lz -Wl,-E > objs/linker.lds
+	#readelf -s --wide objs/nginx_wpd_ics > readelf.out
+	#readelf --sections objs/nginx_wpd_ics > readelf-sections.out
+	#cp readelf.out readelf-ics.out
+	#cp readelf-sections.out readelf-sections-ics.out
+	#cp wpd_disjoint_sets.txt wpd_disjoint_sets_ics.txt
+	#cp wpd_encompassed_funcs.txt wpd_encompassed_funcs_ics.txt
+	#cp wpd_static_reachability.txt wpd_static_reachability_ics.txt
+	#cp wpd_loop_static_reachability.txt wpd_loop_static_reachability_ics.txt
+	#cp wpd_loop_to_func.txt wpd_loop_to_func_ics.txt
+	#cp wpd_static_reachability.txt wpd_static_reachability_ics.txt
+	#cp wpd_loop_static_reachability.txt wpd_loop_static_reachability_ics.txt
+	#cp wpd_stats.txt wpd_stats_ics.txt
+
+
+
 
 modules:
 

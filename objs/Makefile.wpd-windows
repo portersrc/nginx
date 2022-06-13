@@ -412,73 +412,65 @@ base_loop_simplify_ics:
 # On Windows we're not relying on env variables or cl::opt
 #
 wpd_ics:
-	#$(OPT) \
-    #  --function-sections \
-    #  -load ${WPD_PATH}/WholeProgramDebloat.dll \
-    #  -WholeProgramDebloat \
-    #  < objs/nginx_baseline_ls_ics_opt.bc \
-    #  > objs/nginx_wpd_ics_opt.bc
-	## disassemble so we can do a hacky fix to the ics symbols                   
-	#$(LLVM-DIS) objs/nginx_wpd_ics_opt.bc
-	#sed -i \
-    #  's/declare extern_weak i32 @ics_map_indirect_call.2(i64)//w sed_changes_0.txt' \
-    #  objs/nginx_wpd_ics_opt.ll
-	#sed -i \
-    #  's/declare extern_weak i32 @ics_wrapper_debrt_protect_loop_end.3(i32)//w sed_changes_1.txt' \
-    #  objs/nginx_wpd_ics_opt.ll
-	#sed -i \
-    #  's/ics_map_indirect_call.2/ics_map_indirect_call/w sed_changes_2.txt' \
-    #  objs/nginx_wpd_ics_opt.ll
-	#sed -i \
-    #  's/ics_wrapper_debrt_protect_loop_end.3/ics_wrapper_debrt_protect_loop_end/w sed_changes_3.txt' \
-    #  objs/nginx_wpd_ics_opt.ll
-	#sed -i \
-    #  's/debrt_protect_indirect.1/debrt_protect_indirect/w sed_changes_5.txt' \
-    #  objs/nginx_wpd_ics_opt.ll
-	#sed -i \
-    #  's/declare i32 @debrt_protect_indirect(i64)$$//w sed_changes_4.txt' \
-    #  objs/nginx_wpd_ics_opt.ll
-	## now ingest the modified .ll file and run always-inline on it.
-	#$(OPT) \
-    #  --function-sections \
-    #  -always-inline \
-    #  < objs/nginx_wpd_ics_opt.ll \
-    #  > objs/nginx_wpd_ics_opt.bc
-	#$(LLC) \
-    #  --function-sections \
-    #  objs/nginx_wpd_ics_opt.bc \
-    #  -o objs/nginx_wpd_ics_opt.s
-	#${LLC} \
-    #  --function-sections \
-    #  objs/nginx_wpd_ics_opt.bc \
-    #  -filetype=obj \
-    #  -o objs/nginx_wpd_ics_opt.o
-	#$(NM) objs/nginx_wpd_ics_opt.o \
-    #  | ${AWK} '{if($$2=="T" || $$2=="t") print $$0}' \
-    #  | ${SORT} \
-    #  > text_symbol_addrs.out
-	#$(NM) --print-size --size-sort objs/nginx_wpd_ics_opt.o \
-    #  | ${GREP} "t \.text" \
-    #  | ${AWK} '{print $$2'} \
-    #  | ${TAIL} -n 1 \
-    #  > object_text_size.out
-	$(CC) \
-      -g \
-      -ffunction-sections \
-      objs/nginx_wpd_ics_opt.s \
+	$(OPT) \
+      --function-sections \
+      -load ${WPD_PATH}/WholeProgramDebloat.dll \
+      -WholeProgramDebloat \
+      < objs/nginx_baseline_ls_ics_opt.bc \
+      > objs/nginx_wpd_ics_opt.bc
+	# disassemble so we can do a hacky fix to the ics symbols
+	$(LLVM-DIS) objs/nginx_wpd_ics_opt.bc
+	sed -i \
+      's/declare extern_weak i32 @ics_map_indirect_call.2(i64)//w sed_changes_0.txt' \
+      objs/nginx_wpd_ics_opt.ll
+	sed -i \
+      's/declare extern_weak i32 @ics_wrapper_debrt_protect_loop_end.3(i32)//w sed_changes_1.txt' \
+      objs/nginx_wpd_ics_opt.ll
+	sed -i \
+      's/ics_map_indirect_call.2/ics_map_indirect_call/w sed_changes_2.txt' \
+      objs/nginx_wpd_ics_opt.ll
+	sed -i \
+      's/ics_wrapper_debrt_protect_loop_end.3/ics_wrapper_debrt_protect_loop_end/w sed_changes_3.txt' \
+      objs/nginx_wpd_ics_opt.ll
+	sed -i \
+      's/debrt_protect_indirect.1/debrt_protect_indirect/w sed_changes_5.txt' \
+      objs/nginx_wpd_ics_opt.ll
+	sed -i \
+      's/declare i32 @debrt_protect_indirect(i64)$$//w sed_changes_4.txt' \
+      objs/nginx_wpd_ics_opt.ll
+	# now ingest the modified .ll file and run always-inline on it.
+	$(OPT) \
+      --function-sections \
+      -always-inline \
+      < objs/nginx_wpd_ics_opt.ll \
+      > objs/nginx_wpd_ics_opt.bc
+	# produce the .s file just because it's useful for debugging
+	$(LLC) \
+      --function-sections \
+      objs/nginx_wpd_ics_opt.bc \
+      -o objs/nginx_wpd_ics_opt.s
+	$(LLC) \
+      --function-sections \
+      objs/nginx_wpd_ics_opt.bc \
+      -filetype=obj \
+      -o objs/nginx_wpd_ics_opt.o
+	$(NM) --print-size --size-sort objs/nginx_wpd_ics_opt.o \
+      | ${GREP} "t \.text" \
+      | ${AWK} '{print $$2'} \
+      | ${TAIL} -n 1 \
+      > object_text_size.out
+	$(GCC) \
+      objs/nginx_wpd_ics_opt.o \
       -o objs/nginx_wpd_ics.exe \
       ${DEBLOATRT_LIB_PATH}/debloat_rt.lib \
       $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/kernel32.lib \
       $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/user32.lib \
       $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/advapi32.lib \
-      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib \
-      objs/nginx.res
-	#g++ \
-    #  -ffunction-sections \
-    #  -Wl,--verbose \
-    #  objs/nginx_wpd_ics_opt.s \
-    #  -o objs/nginx_wpd_ics \
-    #  -ldebloat_rt -lm -lrt -ldl -lpthread -lcrypt -lpcre -lz -Wl,-E > objs/linker.lds
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib
+	$(NM) objs/nginx_wpd_ics.exe \
+      | ${AWK} '{if($$2=="T" || $$2=="t") print $$0}' \
+      | ${SORT} \
+      > text_symbol_addrs.out
 	#readelf -s --wide objs/nginx_wpd_ics > readelf.out
 	#readelf --sections objs/nginx_wpd_ics > readelf-sections.out
 	#cp readelf.out readelf-ics.out
@@ -491,6 +483,56 @@ wpd_ics:
 	#cp wpd_static_reachability.txt wpd_static_reachability_ics.txt
 	#cp wpd_loop_static_reachability.txt wpd_loop_static_reachability_ics.txt
 	#cp wpd_stats.txt wpd_stats_ics.txt
+HACK_TO_GENERATE_BASE_LDS_FILE: # called it wpd_custlink_ics just to execute it once
+	$(GCC) \
+      -ffunction-sections \
+      -Wl,--verbose \
+      objs/nginx_wpd_ics_opt.o \
+      -o objs/nginx_wpd_ics-hack.exe \
+      ${DEBLOATRT_LIB_PATH}/debloat_rt.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/kernel32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/user32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/advapi32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib \
+      > linker.lds
+wpd_custlink_ics:
+    # Already have the .o we would want. just copy it.
+	#cp objs/nginx_wpd_ics_opt.o objs/nginx_wpd_custlink_ics_opt.o
+    # TODO: this nm command for getting object-text-size cannot be right... do it manually
+	#$(NM) --print-size --size-sort objs/nginx_wpd_custlink_ics_opt.o \
+    #  | ${GREP} "t \.text" \
+    #  | ${AWK} '{print $$2'} \
+    #  | ${TAIL} -n 1 \
+    #  > object_text_size.out
+	$(GCC) \
+      -ffunction-sections \
+      -T wpd-linker-script.lds \
+      objs/nginx_wpd_custlink_ics_opt.o \
+      -o objs/nginx_wpd_custlink.exe \
+      ${DEBLOATRT_LIB_PATH}/debloat_rt.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/kernel32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/user32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/advapi32.lib \
+      $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib
+	#$(GCC) \
+    #  -ffunction-sections \
+    #  -T linker-nearly-default.lds \
+    #  objs/nginx_wpd_custlink_ics_opt.o \
+    #  -o objs/nginx_wpd_custlink.exe \
+    #  ${DEBLOATRT_LIB_PATH}/debloat_rt.lib \
+    #  $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/kernel32.lib \
+    #  $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/user32.lib \
+    #  $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/advapi32.lib \
+    #  $(FIXME_PATH_TO_REALLY_IMPORTANT_WINDOWS_LIBRARIES)/ws2_32.lib
+	$(NM) objs/nginx_wpd_custlink.exe \
+      | ${AWK} '{if($$2=="T" || $$2=="t") print $$0}' \
+      | ${SORT} \
+      > text_symbol_addrs.out
+	#readelf -s --wide objs/nginx_wpd_custlink > readelf.out
+	#readelf --sections objs/nginx_wpd_custlink > readelf-sections.out
+	#cp objs/nginx_wpd_custlink objs/nginx_wpd_custlink_ics
+	#cp readelf.out readelf-custlink-ics.out
+	#cp readelf-sections.out readelf-sections-custlink-ics.out
 
 
 
